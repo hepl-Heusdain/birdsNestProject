@@ -1,0 +1,8 @@
+# ignore generated files
+Rpi/images/
+Rpi/thumbs/
+
+# ignore config file
+config.ini
+config.json
+*.conf

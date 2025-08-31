@@ -1,0 +1,14 @@
+{
+    "MQTT": {
+        "BROKER": "your.mqtt.broker.address",
+        "PORT": 1883,
+        "TOPIC": "test/topic",
+        "USERNAME": "yourUsername",
+        "PASSWORD": "yourPassword"
+        },
+
+    "WLAN": {
+        "SSID": "yourWifiSsid",
+        "wlanPasswd": "yourWifiPassword"
+        }
+    }
