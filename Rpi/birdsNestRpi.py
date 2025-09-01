@@ -8,6 +8,7 @@ import os, gc, configparser, uuid
 
 imageChunks = {}
 totalChunks = None
+batteryPercent = 0
 config = configparser.ConfigParser()
 config.read(os.path.join(os.path.dirname(__file__), 'config.ini'))
 
@@ -57,15 +58,16 @@ app = Flask(__name__)
 @app.route("/")
 def index():
     thumbnails()
-    files_with_time = []
+    global batteryPercent
+    files = []
     for f in os.listdir(imageDir):
         path = os.path.join(imageDir, f)
         if os.path.isfile(path):
             ctime = os.path.getctime(path)
-            files_with_time.append({"name": f, "time": ctime})
-    files_with_time.sort(key=lambda x: x["time"], reverse=True)
-    return render_template("index.html", files=files_with_time)
-
+            files.append({"name": f, "time": ctime})
+    files.sort(key=lambda x: x["time"], reverse=True)
+    return render_template("index.html", files=files, battery=int(batteryPercent))
+    
 @app.route("/images/<path:filename>")
 def images(filename):
     filename = secure_filename(filename)
@@ -91,9 +93,10 @@ def MQTTsetup():
             print(f"Failed to connect, return code {rc}")
     
     def on_message(client, userdata, msg):
-        global totalChunks
+        global totalChunks, batteryPercent
         try:
-            index_b, total_b, chunkData = msg.payload.split(b'|', 2)
+            index_b, total_b, batteryPercent, chunkData = msg.payload.split(b'|', 3)
+            print(f"Battery percentge: {batteryPercent}%")
             index = int(index_b)
             if totalChunks is None:
                 totalChunks = int(total_b)

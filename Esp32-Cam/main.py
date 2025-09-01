@@ -1,7 +1,7 @@
-import esp32, ubinascii, camera, network, ujson # type: ignore
+import esp32, ubinascii, camera, network, ujson, urandom, ntptime # type: ignore
 from simple import MQTTClient
-from time import sleep, ticks_ms, ticks_diff
-from machine import Pin, unique_id, deepsleep, wake_reason, PIN_WAKE # type: ignore
+from time import sleep, ticks_ms, ticks_diff, localtime
+from machine import Pin, unique_id, deepsleep, wake_reason, EXT0_WAKE, TIMER_WAKE # type: ignore
 
 config = ujson.load(open('config.json'))
 
@@ -23,15 +23,47 @@ client = MQTTClient(clientId, broker, port=port, user=username, password=passwd)
 esp32.wake_on_ext0(pin=pirSensor, level=esp32.WAKEUP_ANY_HIGH)
 
 def main():
-    if wake_reason() == PIN_WAKE:
+    wakeReason = wake_reason()
+    if wakeReason == 0:
+        try:
+            connect_wifi(timeout=20, retries=5)
+        except Exception as e:
+            print(f"Error connecting to WiFi: {e}")
+            return
+        ntptime.settime()
+        sendBatteryPercentage()
+    elif wakeReason == EXT0_WAKE:
         captureSend()
         while(pirSensor.value() == 1):
             sleep(0.2)
         sleep(2)
-    print("Going to sleep")
-    deepsleep()
+    elif wakeReason == TIMER_WAKE:
+        try:
+            connect_wifi()
+        except Exception as e:
+            print(f"Error connecting to WiFi: {e}")
+            return
+        sendBatteryPercentage()
 
-def connect_wifi(timeout=10000, retries=2):
+    print("Going to sleep")
+    deepsleep(timeUntilMidnight())
+
+def sendBatteryPercentage():
+    try:
+        client.connect()
+        client.publish(topic, b'%d|%d|%d|%d' % (0, 0, urandom.randint(0, 100), 0))
+        sleep(0.1)
+        client.disconnect()
+    except Exception as e:
+        print(f"MQTT error: {e}")
+
+def timeUntilMidnight():
+    t = localtime()
+    msUntilMidnight = ((23 - t[3]) * 3600 + (59 - t[4]) * 60 + (60 - t[5])) * 1000
+    print(f"Milliseconds until midnight: {msUntilMidnight}")
+    return msUntilMidnight
+
+def connect_wifi(timeout=10000, retries=3):
     attempt = 0
     while attempt < retries:
         if not WLAN.active():
@@ -70,7 +102,7 @@ def captureSend():
     LED.value(1)
     camera.init(0, format=camera.JPEG, fb_location=camera.PSRAM)
     camera.framesize(camera.FRAME_SVGA)
-    camera.quality(4)
+#    camera.quality(5)
     img = camera.capture()
     LED.value(0)
     camera.deinit()
@@ -86,10 +118,11 @@ def captureSend():
 
     try:
         client.connect()
+        battery = urandom.randint(0, 100)
         for i in range(numChunks):
             start = i * chunkSize
             end = start + chunkSize
-            header = b'%d|%d|' % (i, numChunks)
+            header = b'%d|%d|%d|' % (i, numChunks, battery)
             payload = header + img[start:end]
             client.publish(topic, payload)
             sleep(0.1)
